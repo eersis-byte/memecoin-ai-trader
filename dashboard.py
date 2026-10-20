@@ -29,23 +29,36 @@ st.subheader('Trade log')
 st.dataframe(pd.DataFrame(state['trades'][::-1]), width='stretch')
 
 st.subheader('Discovery scanner')
+# and ending immediately before st.info(...) in dashboard.py with this block.
+st.subheader('Discovery scanner')
 if st.button('Fetch current candidates'):
     with st.spinner('Querying DexScreener...'):
         try:
-            st.session_state['scan_results'] = scan()
+            results, stats = scan(diagnostics=True)
+            st.session_state['scan_results'] = results
+            st.session_state['scan_stats'] = stats
             st.session_state['scan_error'] = None
         except Exception as exc:
-            st.session_state['scan_results'] = None
             st.session_state['scan_error'] = f'{type(exc).__name__}: {exc}'
 
 if st.session_state.get('scan_error'):
     st.error('Scanner failed: ' + st.session_state['scan_error'])
-elif 'scan_results' in st.session_state:
-    results = st.session_state['scan_results']
-    st.metric('Qualified candidates', len(results))
+elif 'scan_stats' in st.session_state:
+    stats = st.session_state['scan_stats']
+    a, b, c = st.columns(3)
+    a.metric('API pairs returned', stats['raw_pairs'])
+    b.metric('Unique Solana tokens', stats['unique_tokens'])
+    c.metric('Qualified candidates', stats['qualified'])
+    st.write('Search results and errors')
+    st.dataframe(pd.DataFrame(stats['searches']), width='stretch')
+    if stats['rejections']:
+        st.write('Why tokens were rejected (first failing rule per token)')
+        st.dataframe(pd.DataFrame([{'reason': k, 'count': v}
+                                   for k, v in stats['rejections'].items()]), width='stretch')
+    results = st.session_state.get('scan_results', [])
     if results:
         st.dataframe(pd.DataFrame(results), width='stretch')
     else:
-        st.warning('No coins qualified. This can mean DexScreener returned no pairs, requests failed, or all pairs were excluded by trader.py filters. Check Streamlit app logs for "Warning: search" messages.')
+        st.warning('No tokens passed the existing filters. Review the diagnostics above.')
 
 st.info('Prices are polled snapshots. The scanner is limited to seed searches; missing/stale quotes and unmodeled liquidity impact make performance estimates optimistic. The score is a heuristic, not trained AI. Do not fund a wallet based on this prototype.')

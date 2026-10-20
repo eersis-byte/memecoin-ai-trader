@@ -25,21 +25,43 @@ def get_json(url):
     return r.json()
 
 
-def scan():
-    """Search a limited discovery universe; not a complete new-token feed."""
+def scan(diagnostics=False):
+    """Return qualified Solana pairs, optionally with diagnostic information."""
+    from collections import Counter
+    from urllib.parse import quote
+
+    stats = {'searches': [], 'raw_pairs': 0, 'solana_pairs': 0,
+             'unique_tokens': 0, 'rejections': {}, 'qualified': 0}
     pairs = {}
+    rejected = Counter()
+
     for symbol in SEEDS:
+        entry = {'term': symbol, 'status': 'ok', 'pairs': 0}
         try:
-            payload = get_json(f'{API}/latest/dex/search?q={symbol}')
-            for p in payload.get('pairs') or []:
+            payload = get_json(f'{API}/latest/dex/search?q={quote(symbol)}')
+            if not isinstance(payload, dict):
+                raise ValueError('Unexpected API response format')
+            found = payload.get('pairs') or []
+            entry['pairs'] = len(found)
+            stats['raw_pairs'] += len(found)
+            for p in found:
                 if p.get('chainId') != 'solana':
                     continue
-                key = p.get('baseToken', {}).get('address')
-                if not key or key in pairs:
+                stats['solana_pairs'] += 1
+                address = (p.get('baseToken') or {}).get('address')
+                if not address:
                     continue
-                pairs[key] = p
-        except (requests.RequestException, ValueError) as exc:
-            print(f'Warning: search for {symbol} failed: {exc}')
+                # Keep the most liquid pair per token, not the first search hit.
+                old = pairs.get(address)
+                liq = float((p.get('liquidity') or {}).get('usd') or 0)
+                old_liq = float((old.get('liquidity') or {}).get('usd') or 0) if old else -1
+                if liq > old_liq:
+                    pairs[address] = p
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            entry['status'] = f'{type(exc).__name__}: {exc}'
+        stats['searches'].append(entry)
+
+    stats['unique_tokens'] = len(pairs)
     results = []
     for p in pairs.values():
         try:
@@ -47,23 +69,39 @@ def scan():
             volume = float((p.get('volume') or {}).get('h24') or 0)
             change = float((p.get('priceChange') or {}).get('h1') or 0)
             price = float(p.get('priceUsd') or 0)
-            buys = int(((p.get('txns') or {}).get('h1') or {}).get('buys') or 0)
-            sells = int(((p.get('txns') or {}).get('h1') or {}).get('sells') or 0)
-            age_hours = (time.time() * 1000 - int(p.get('pairCreatedAt') or 0)) / 3_600_000
-            if not (price > 0 and liquidity >= 50000 and volume >= 100000 and 24 <= age_hours <= 24 * 365 and buys + sells >= 30):
-                continue
-            # Heuristic score, not an ML prediction. Avoid chasing extreme one-hour pumps.
-            momentum = max(0, 1 - abs(change - 4) / 12)
-            activity = buys / max(1, buys + sells)
-            liquidity_score = min(1, liquidity / 500000)
-            score = round(100 * (0.45 * momentum + 0.30 * activity + 0.25 * liquidity_score), 1)
-            results.append({'symbol': p['baseToken']['symbol'], 'name': p['baseToken']['name'],
-                            'address': p['baseToken']['address'], 'pair': p['pairAddress'],
-                            'price': price, 'liquidity': liquidity, 'volume24h': volume,
-                            'change1h': change, 'score': score, 'url': p.get('url')})
-        except (TypeError, ValueError, KeyError):
-            continue
-    return sorted(results, key=lambda x: x['score'], reverse=True)
+            tx = (p.get('txns') or {}).get('h1') or {}
+            buys = int(tx.get('buys') or 0)
+            sells = int(tx.get('sells') or 0)
+            created = p.get('pairCreatedAt')
+            age_hours = ((time.time() * 1000 - int(created)) / 3600000) if created else None
+            if price <= 0:
+                rejected['missing/zero price'] += 1
+            elif liquidity < 50000:
+                rejected['liquidity under $50k'] += 1
+            elif volume < 100000:
+                rejected['24h volume under $100k'] += 1
+            elif age_hours is None:
+                rejected['unknown pair age'] += 1
+            elif not (24 <= age_hours <= 24 * 365):
+                rejected['pair age outside 1 day–1 year'] += 1
+            elif buys + sells < 30:
+                rejected['under 30 hourly transactions'] += 1
+            else:
+                momentum = max(0, 1 - abs(change - 4) / 12)
+                activity = buys / max(1, buys + sells)
+                liquidity_score = min(1, liquidity / 500000)
+                score = round(100 * (0.45 * momentum + 0.30 * activity + 0.25 * liquidity_score), 1)
+                base = p.get('baseToken') or {}
+                results.append({'symbol': base.get('symbol', '?'), 'name': base.get('name', ''),
+                                'address': base['address'], 'pair': p.get('pairAddress'),
+                                'price': price, 'liquidity': liquidity, 'volume24h': volume,
+                                'change1h': change, 'score': score, 'url': p.get('url')})
+        except (TypeError, ValueError, KeyError, OverflowError) as exc:
+            rejected['malformed pair data'] += 1
+    stats['rejections'] = dict(rejected)
+    stats['qualified'] = len(results)
+    results.sort(key=lambda x: x['score'], reverse=True)
+    return (results, stats) if diagnostics else results
 
 
 def default_state():
