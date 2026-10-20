@@ -16,7 +16,7 @@ if state['equity_history']:
     history['time'] = pd.to_datetime(history['time'])
     st.line_chart(history.set_index('time')['equity'])
 st.subheader('Open positions')
-st.dataframe(pd.DataFrame([{'token': p['symbol'], 'address': a, 'units': p['units'], 'entry': p['entry_price'], 'last observed price': p['last_price']} for a, p in state['positions'].items()]), use_container_width=True)
+st.dataframe(pd.DataFrame([{'token': p['symbol'], 'address': a, 'units': p['units'], 'entry': p['entry_price'], 'last observed price': p['last_price']} for a, p in state['positions'].items()]), width="stretch")
 st.subheader('Trade log')
 st.dataframe(pd.DataFrame(state['trades'][::-1]), use_container_width=True)
 st.subheader('Discovery scanner')
