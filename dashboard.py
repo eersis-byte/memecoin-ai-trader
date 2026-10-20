@@ -3,7 +3,7 @@ import streamlit as st
 from trader import load, scan
 
 st.set_page_config(page_title='MemeCoin AI Trader — Paper', layout='wide')
-st.title('MemeCoin AI Trader 1.0')
+st.title('MemeCoin AI Trader 1.1')
 st.caption('PAPER TRADING ONLY · Educational prototype · No real-money orders')
 
 state = load()
@@ -28,8 +28,6 @@ st.dataframe(pd.DataFrame([
 st.subheader('Trade log')
 st.dataframe(pd.DataFrame(state['trades'][::-1]), width='stretch')
 
-st.subheader('Discovery scanner')
-# and ending immediately before st.info(...) in dashboard.py with this block.
 st.subheader('Discovery scanner')
 if st.button('Fetch current candidates'):
     with st.spinner('Querying DexScreener...'):
