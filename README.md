@@ -1,11 +1,12 @@
-# MemeCoin AI Trader 1.2 — Paper only
+# MemeCoin AI Trader 1.3
 
-Upload the four files in this folder to the ROOT of your existing `memecoin-ai-trader` GitHub repository, replacing files of the same names. Streamlit entrypoint: `dashboard.py` on `main`.
+Educational Solana meme-token paper simulator. **No live orders or wallet access.**
 
-The Discovery Scanner searches 14 seed terms and shows all returned Solana tokens, even those that fail eligibility checks. A separate button runs **one** paper-trading cycle using fresh search results and independent held-token quotes. Each trade is simulated. There is no wallet integration or live execution.
+## Deploy
+Upload `dashboard.py`, `trader.py`, `requirements.txt`, and `README.md` to the root of the existing GitHub repository. Set Streamlit main file to `dashboard.py`. Commit changes; Streamlit should redeploy.
 
-**Important:** Streamlit Community Cloud local filesystem is ephemeral. Paper trades may disappear after redeploy, restart, or moving to another server replica. For trustworthy long-term tracking, use an external durable database and a single worker. Do not run concurrent paper cycles; this prototype does not lock state against multiple users/sessions. A public app allows visitors to trigger simulated cycles on the shared instance.
+## Use
+Click **Run one paper trading cycle**. The **Last cycle result** section shows the outcome, candidate counts, and trade counts without an immediate rerun hiding the message. A completed cycle with zero trades is valid: it may have found no eligible coins or no score of 70 or above. Use **Fetch current candidates** to see market diagnostics.
 
-Trade model uses 1% estimated cost on each side, up to 5% equity per position, 4 positions, score >=70, 8% stop, 16% target, 10% trailing stop, and a daily-entry cutoff after 3% equity decline. These are not guaranteed execution limits or a validated profitable strategy. Market data can be missing or misleading. Never upload secrets or connect real funds.
-
-Local one-shot command: `python trader.py --once`. To view locally: `streamlit run dashboard.py`.
+## Limitations
+The last-cycle message is kept in browser session state only; it is not durable. The paper account is stored on the Streamlit server's temporary filesystem and can reset on restart; it is also shared by visitors to the public app. Do not rely on it for long-term or multi-user performance tracking. There is no background worker. A separate durable database, user authentication, and realistic backtesting are needed before serious evaluation. Never supply wallet secrets.
