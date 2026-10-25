@@ -40,7 +40,7 @@ class Store:
         with self.engine.begin() as conn:
             if expected_version is None:
                 # Competing first-writers: insert only if account is absent.
-                result = conn.execute(text("INSERT INTO accounts(user_id,state_json,version) SELECT :u,:s,1 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE user_id=:u)"), {"u": user_id, "s": json.dumps(state)})
+                result = conn.execute(text("INSERT INTO accounts(user_id,state_json,version) VALUES (:u,:s,1) ON CONFLICT (user_id) DO NOTHING"), {"u": user_id, "s": json.dumps(state)})
             else:
                 result = conn.execute(text("UPDATE accounts SET state_json=:s,version=version+1 WHERE user_id=:u AND version=:v"), {"s": json.dumps(state), "u": user_id, "v": expected_version})
             if result.rowcount != 1: raise RuntimeError("Concurrent update detected; refresh and retry")
